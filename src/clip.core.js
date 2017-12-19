@@ -250,6 +250,7 @@
          * @param {String} opts.background 裁剪出图片的背景色，默认为透明，保存成jpg时默认为白色
          * @param {String} opts.shape 裁剪形状，值在 CLIP.SHAPE 中定义，默认是正方形
          * @param {String} opts.type 保存的图片类型，默认是 image/png，值在 CLIP.TYPE 中定义
+         * @param {String} opts.rectRatio 矩形裁剪形状宽高比，当 type=CLIP.SHAPE.RECT 时有效，值为 宽:高，默认为 1
          * @param {Number} opts.quality 保存的jpg图片质量，type=image/jpeg 时有效，有效值0~1
          * @param {Number} opts.width 保存图片的宽度，不传该值时根据height的值等比缩放
          * @param {Number} opts.height 保存图片的高度，不传该值时根据width的值等比缩放
@@ -432,8 +433,7 @@
         _setClipShapePath(canvas, draw) {
             var self = this;
             var __ = self.__;
-            var opts = __.opts;
-            var view = __.view;
+            var { opts, view } = __;
             var width = canvas.width;
             var height = canvas.height;
             var ctx = canvas.getContext("2d");
@@ -442,12 +442,26 @@
             var size = Math.min(width, height);
             var left = Math.max(0, parseInt((width - size) / 2));
             var top = Math.max(0, parseInt((height - size) / 2));
+            var right = left + size;
+            var bottom = top + size;
             if (draw) {
+                if (opts.shape == CLIP.SHAPE.RECT && opts.rectRatio > 0) {
+                    var _s = opts.rectRatio;
+                    if (_s > 1) {
+                        _s = size * (_s - 1) / (2 * _s);
+                        top = parseInt(top + _s);
+                        bottom = parseInt(bottom - _s);
+                    } else {
+                        _s = size * (1 - _s) / 2
+                        left = parseInt(left + _s);
+                        right = parseInt(right - _s);
+                    }
+                }
                 view.size = size;
                 view.left = left;
                 view.top = top;
-                view.right = left + size;
-                view.bottom = top + size;
+                view.right = right;
+                view.bottom = bottom;
             }
 
             // 清空画布
@@ -462,8 +476,8 @@
             ctx.beginPath();
             if (opts.shape == CLIP.SHAPE.CIRCLE) { // 圆形
                 ctx.arc(parseInt(width / 2), parseInt(height / 2), parseInt(size / 2), 0, 2 * Math.PI);
-            } else { // 正方形
-                ctx.rect(left, top, size, size);
+            } else { // 正方形 & 矩形
+                ctx.rect(left, top, right - left, bottom - top);
             }
             ctx.closePath();
 
@@ -694,18 +708,18 @@
                         var scale = transform.scale;
                         var x1 = e.touches[0].pageX;
                         var y1 = e.touches[0].pageY;
-    
+
                         if (e.touches.length == 2 && pos.length == 2) { // 缩放
                             x2 = e.touches[1].pageX;
                             y2 = e.touches[1].pageY;
                             var cx = (pos[0].x + pos[1].x) / 2;
                             var cy = (pos[0].y + pos[1].y) / 2;
-    
+
                             // 双指距离改变量
                             var l1 = Math.sqrt(Math.pow(pos[1].x - pos[0].x, 2) + Math.pow(pos[1].y - pos[0].y, 2));
                             var l2 = Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
                             var sl = l2 / l1;
-    
+
                             // 将绕 cx,cy 缩放转换成绕可视区域左上角缩放
                             scale = transform.scale * sl;
                             var ds = (sl - 1) / scale;
@@ -715,9 +729,9 @@
                             x = transform.x + (pos[0].x - x1) / scale;
                             y = transform.y + (pos[0].y - y1) / scale;
                         }
-    
+
                         setTransform(x, y, scale);
-    
+
                         pos[0].x = x1;
                         pos[0].y = y1;
                         if (pos.length == 2) {
@@ -887,9 +901,19 @@
                     ctx.fillStyle = opts.background;
                     ctx.fillRect(0, 0, width, height);
                 }
-                self._setClipShapePath(canvas);
-                ctx.clip();
+                // 圆形需要做裁剪
+                if (opts.shape == CLIP.SHAPE.CIRCLE) {
+                    self._setClipShapePath(canvas);
+                    ctx.clip();
+                }
                 ctx.drawImage(__.canvas, x, y, width, height, 0, 0, width, height);
+                ///////////////////////////////////////
+                console.log(x, y, width, height)
+                // var result = document.querySelector(".js_result");
+                // result.innerHTML = "";
+                // var img = new Image();
+                // img.src = canvas.toDataURL("image/jpeg");
+                // document.body.appendChild(img);
 
                 // 调整大小
                 if (opts.width > 0 || opts.height > 0) {
